@@ -12,7 +12,8 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 
 import com.google.android.gms.common.api.CommonStatusCodes;
-import com.google.android.gms.vision.barcode.Barcode;
+// import com.google.android.gms.vision.barcode.Barcode; // Old Vision API
+import com.google.mlkit.vision.barcode.common.Barcode; // ML Kit Vision API
 
 import java.util.Map;
 
@@ -150,13 +151,27 @@ public class FlutterBarcodeScannerPlugin implements MethodCallHandler, ActivityR
             if (resultCode == CommonStatusCodes.SUCCESS) {
                 if (data != null) {
                     try {
-                        Barcode barcode = data.getParcelableExtra(BarcodeCaptureActivity.BarcodeObject);
-                        String barcodeResult = barcode.rawValue;
-                        pendingResult.success(barcodeResult);
+                        // Try to get the ML Kit Barcode object first
+                        com.google.mlkit.vision.barcode.common.Barcode barcode = data.getParcelableExtra(BarcodeCaptureActivity.BarcodeObject);
+                        if (barcode != null) {
+                            String barcodeResult = barcode.getRawValue();
+                            pendingResult.success(barcodeResult != null ? barcodeResult : "-1");
+                        } else {
+                            // Fallback to "BarcodeRawValue" if the object is null (e.g. if activity passed it as String)
+                            String barcodeResult = data.getStringExtra("BarcodeRawValue");
+                            if (barcodeResult != null) {
+                                pendingResult.success(barcodeResult);
+                            } else {
+                                Log.e(TAG, "Barcode data is null in onActivityResult.");
+                                pendingResult.success("-1");
+                            }
+                        }
                     } catch (Exception e) {
+                        Log.e(TAG, "Error processing barcode result: " + e.getMessage());
                         pendingResult.success("-1");
                     }
                 } else {
+                    Log.e(TAG, "Intent data is null in onActivityResult.");
                     pendingResult.success("-1");
                 }
                 pendingResult = null;
@@ -192,18 +207,29 @@ public class FlutterBarcodeScannerPlugin implements MethodCallHandler, ActivityR
      *
      * @param barcode
      */
-    public static void onBarcodeScanReceiver(final Barcode barcode) {
+    public static void onBarcodeScanReceiver(final com.google.mlkit.vision.barcode.common.Barcode barcode) {
         try {
-            if (barcode != null && !barcode.displayValue.isEmpty()) {
-                activity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        barcodeStream.success(barcode.rawValue);
-                    }
-                });
+            if (barcode != null && barcode.getRawValue() != null && !barcode.getRawValue().isEmpty()) {
+                final String rawValue = barcode.getRawValue();
+                if (activity != null && barcodeStream != null) { // Add null checks for activity and barcodeStream
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try { // Add try-catch for stream operations
+                                barcodeStream.success(rawValue);
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error sending barcode via stream: " + e.getMessage());
+                            }
+                        }
+                    });
+                } else {
+                    Log.w(TAG, "Activity or barcodeStream is null in onBarcodeScanReceiver. Cannot send data.");
+                }
+            } else {
+                Log.w(TAG, "Received null or empty barcode in onBarcodeScanReceiver.");
             }
         } catch (Exception e) {
-            Log.e(TAG, "onBarcodeScanReceiver: " + e.getLocalizedMessage());
+            Log.e(TAG, "Exception in onBarcodeScanReceiver: " + e.getLocalizedMessage());
         }
     }
 

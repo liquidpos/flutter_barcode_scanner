@@ -35,8 +35,16 @@ import android.view.SurfaceView;
 import android.view.WindowManager;
 
 import com.google.android.gms.common.images.Size;
-import com.google.android.gms.vision.Detector;
-import com.google.android.gms.vision.Frame;
+// import com.google.android.gms.vision.Detector; // Will be replaced by ML Kit Scanner
+// import com.google.android.gms.vision.Frame; // Will be replaced by ML Kit InputImage
+
+import com.google.mlkit.vision.barcode.common.Barcode; // ML Kit Barcode
+import com.google.mlkit.vision.barcode.BarcodeScanner; // ML Kit Scanner
+import com.google.mlkit.vision.common.InputImage; // ML Kit InputImage
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import androidx.annotation.NonNull;
+
 
 import java.io.IOException;
 import java.lang.Thread.State;
@@ -51,6 +59,19 @@ import java.util.Map;
 
 @SuppressWarnings("deprecation")
 public class CameraSource {
+
+    // Interface for barcode scanning results
+    public interface OnBarcodesScannedListener {
+        void onBarcodesScanned(List<Barcode> barcodes);
+        void onBarcodeScanError(String errorMessage);
+    }
+
+    private OnBarcodesScannedListener mOnBarcodesScannedListener;
+
+    public void setOnBarcodesScannedListener(OnBarcodesScannedListener listener) {
+        mOnBarcodesScannedListener = listener;
+    }
+
     @SuppressLint("InlinedApi")
     public static final int CAMERA_FACING_BACK = CameraInfo.CAMERA_FACING_BACK;
     @SuppressLint("InlinedApi")
@@ -88,6 +109,8 @@ public class CameraSource {
     private Thread mProcessingThread;
     private FrameProcessingRunnable mFrameProcessor;
 
+    // private BarcodeScanner mScanner; // This will be passed to FrameProcessingRunnable
+
     /**
      * Map to convert between a byte array, received from the camera, and its associated byte
      * buffer.  We use byte buffers internally because this is a more efficient way to call into
@@ -124,22 +147,23 @@ public class CameraSource {
      * Builder for configuring and creating an associated camera source.
      */
     public static class Builder {
-        private final Detector<?> mDetector;
+        // private final Detector<?> mDetector; // Old vision detector
+        private BarcodeScanner mScanner; // ML Kit Scanner
         private CameraSource mCameraSource = new CameraSource();
 
         /**
-         * Creates a camera source builder with the supplied context and detector.  Camera preview
-         * images will be streamed to the associated detector upon starting the camera source.
+         * Creates a camera source builder with the supplied context and scanner.  Camera preview
+         * images will be streamed to the associated scanner upon starting the camera source.
          */
-        public Builder(Context context, Detector<?> detector) {
+        public Builder(Context context, BarcodeScanner scanner) {
             if (context == null) {
                 throw new IllegalArgumentException("No context supplied.");
             }
-            if (detector == null) {
-                throw new IllegalArgumentException("No detector supplied.");
+            if (scanner == null) {
+                throw new IllegalArgumentException("No scanner supplied.");
             }
-
-            mDetector = detector;
+            // mDetector = detector; // Old
+            mScanner = scanner;
             mCameraSource.mContext = context;
         }
 
@@ -200,7 +224,8 @@ public class CameraSource {
          * Creates an instance of the camera source.
          */
         public CameraSource build() {
-            mCameraSource.mFrameProcessor = mCameraSource.new FrameProcessingRunnable(mDetector);
+            // mCameraSource.mFrameProcessor = mCameraSource.new FrameProcessingRunnable(mDetector); // Old
+            mCameraSource.mFrameProcessor = mCameraSource.new FrameProcessingRunnable(mScanner);
             return mCameraSource;
         }
     }
@@ -270,7 +295,9 @@ public class CameraSource {
     public void release() {
         synchronized (mCameraLock) {
             stop();
-            mFrameProcessor.release();
+            if (mFrameProcessor != null) {
+                mFrameProcessor.stop(); // Changed from release
+            }
         }
     }
 
@@ -945,7 +972,8 @@ public class CameraSource {
     }
 
     private class FrameProcessingRunnable implements Runnable {
-        private Detector<?> mDetector;
+        // private Detector<?> mDetector; // Old vision detector
+        private BarcodeScanner mScanner; // ML Kit Scanner
         private long mStartTimeMillis = SystemClock.elapsedRealtime();
 
         // This lock guards all of the member variables below.
@@ -956,18 +984,22 @@ public class CameraSource {
         private long mPendingTimeMillis;
         private int mPendingFrameId = 0;
         private ByteBuffer mPendingFrameData;
+        private int mFrameRotation; // To store rotation for InputImage
 
-        FrameProcessingRunnable(Detector<?> detector) {
-            mDetector = detector;
+        FrameProcessingRunnable(BarcodeScanner scanner) {
+            // mDetector = detector; // Old
+            mScanner = scanner;
         }
 
         @SuppressLint("Assert")
-        void release() {
+        void stop() { // Renamed from release
             assert (mProcessingThread == null || mProcessingThread.getState() == State.TERMINATED);
-            if (mDetector != null) {
-                mDetector.release();
-                mDetector = null;
-            }
+            // With ML Kit, the scanner lifecycle is managed by BarcodeScanning.getClient(),
+            // so we don't release it here.
+            // if (mScanner != null) {
+            //    mScanner.close(); // ML Kit scanners are AutoCloseable
+            //    mScanner = null;
+            // }
         }
 
         void setActive(boolean active) {
@@ -998,7 +1030,7 @@ public class CameraSource {
 
         @Override
         public void run() {
-            Frame outputFrame;
+            // Frame outputFrame; // Old vision Frame
             ByteBuffer data;
 
             while (true) {
@@ -1007,6 +1039,7 @@ public class CameraSource {
                         try {
                             mLock.wait();
                         } catch (InterruptedException e) {
+                            // Log.d("CameraSource", "Frame processing loop interrupted.", e);
                             return;
                         }
                     }
@@ -1015,24 +1048,74 @@ public class CameraSource {
                         return;
                     }
 
-                    outputFrame = new Frame.Builder()
-                            .setImageData(mPendingFrameData, mPreviewSize.getWidth(),
-                                    mPreviewSize.getHeight(), ImageFormat.NV21)
-                            .setId(mPendingFrameId)
-                            .setTimestampMillis(mPendingTimeMillis)
-                            .setRotation(mRotation)
-                            .build();
+                    // outputFrame = new Frame.Builder() // Old vision Frame builder
+                    //         .setImageData(mPendingFrameData, mPreviewSize.getWidth(),
+                    //                 mPreviewSize.getHeight(), ImageFormat.NV21)
+                    //         .setId(mPendingFrameId)
+                    //         .setTimestampMillis(mPendingTimeMillis)
+                    //         .setRotation(mRotation) // mRotation is from CameraSource
+                    //         .build();
+                    
+                    // Get the rotation from CameraSource's mRotation field
+                    // The rotation needs to be converted to one of InputImage.IMAGE_ROTATION_DEGREES constants
+                    int imageRotation;
+                    switch (mRotation) { // mRotation is field in outer class CameraSource (0, 1, 2, 3)
+                        case 0:
+                            imageRotation = InputImage.ROTATION_0;
+                            break;
+                        case 1:
+                            imageRotation = InputImage.ROTATION_90;
+                            break;
+                        case 2:
+                            imageRotation = InputImage.ROTATION_180;
+                            break;
+                        case 3:
+                            imageRotation = InputImage.ROTATION_270;
+                            break;
+                        default:
+                            imageRotation = InputImage.ROTATION_0;
+                            // Log.e("CameraSource", "Invalid mRotation value: " + mRotation);
+                    }
+
+
+                    InputImage image = InputImage.fromByteBuffer(mPendingFrameData,
+                            mPreviewSize.getWidth(),
+                            mPreviewSize.getHeight(),
+                            imageRotation, // Use the calculated imageRotation
+                            InputImage.IMAGE_FORMAT_NV21 // Assuming NV21, common for camera preview
+                    );
 
                     data = mPendingFrameData;
                     mPendingFrameData = null;
                 }
 
-
                 try {
-                    mDetector.receiveFrame(outputFrame);
+                    // mDetector.receiveFrame(outputFrame); // Old vision detector call
+                    if (mScanner != null && mOnBarcodesScannedListener != null) {
+                        mScanner.process(image)
+                                .addOnSuccessListener(new OnSuccessListener<List<Barcode>>() {
+                                    @Override
+                                    public void onSuccess(List<Barcode> barcodes) {
+                                        if (mOnBarcodesScannedListener != null) {
+                                            mOnBarcodesScannedListener.onBarcodesScanned(barcodes);
+                                        }
+                                    }
+                                })
+                                .addOnFailureListener(new OnFailureListener() {
+                                    @Override
+                                    public void onFailure(@NonNull Exception e) {
+                                        if (mOnBarcodesScannedListener != null) {
+                                            mOnBarcodesScannedListener.onBarcodeScanError(e.getMessage());
+                                        }
+                                    }
+                                });
+                    }
                 } catch (Throwable t) {
+                    // Log.e("CameraSource", "Exception thrown from receiver.", t);
                 } finally {
-                    mCamera.addCallbackBuffer(data.array());
+                    if (data != null && mCamera != null) { // Add null check for mCamera
+                        mCamera.addCallbackBuffer(data.array());
+                    }
                 }
             }
         }

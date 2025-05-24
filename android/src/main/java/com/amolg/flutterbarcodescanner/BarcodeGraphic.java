@@ -22,7 +22,8 @@ import android.graphics.RectF;
 
 
 import com.amolg.flutterbarcodescanner.camera.GraphicOverlay;
-import com.google.android.gms.vision.barcode.Barcode;
+// import com.google.android.gms.vision.barcode.Barcode; // Old Vision API
+import com.google.mlkit.vision.barcode.common.Barcode; // ML Kit Vision API
 
 /**
  * Graphic instance for rendering barcode position, size, and ID within an associated graphic
@@ -42,7 +43,7 @@ public class BarcodeGraphic extends GraphicOverlay.Graphic {
 
     private Paint mRectPaint;
     private Paint mTextPaint;
-    private volatile Barcode mBarcode;
+    private volatile com.google.mlkit.vision.barcode.common.Barcode mBarcode; // Updated type
 
     BarcodeGraphic(GraphicOverlay overlay) {
         super(overlay);
@@ -68,7 +69,7 @@ public class BarcodeGraphic extends GraphicOverlay.Graphic {
         this.mId = id;
     }
 
-    public Barcode getBarcode() {
+    public com.google.mlkit.vision.barcode.common.Barcode getBarcode() { // Updated return type
         return mBarcode;
     }
 
@@ -76,7 +77,7 @@ public class BarcodeGraphic extends GraphicOverlay.Graphic {
      * Updates the barcode instance from the detection of the most recent frame.  Invalidates the
      * relevant portions of the overlay to trigger a redraw.
      */
-    void updateItem(Barcode barcode) {
+    void updateItem(com.google.mlkit.vision.barcode.common.Barcode barcode) { // Updated parameter type
         mBarcode = barcode;
         postInvalidate();
     }
@@ -86,8 +87,8 @@ public class BarcodeGraphic extends GraphicOverlay.Graphic {
      */
     @Override
     public void draw(Canvas canvas) {
-        Barcode barcode = mBarcode;
-        if (barcode == null) {
+        com.google.mlkit.vision.barcode.common.Barcode barcode = mBarcode; // Updated type
+        if (barcode == null || barcode.getBoundingBox() == null) { // Added null check for bounding box
             return;
         }
 
@@ -100,6 +101,9 @@ public class BarcodeGraphic extends GraphicOverlay.Graphic {
         canvas.drawRect(rect, mRectPaint);
 
         // Draws a label at the bottom of the barcode indicate the barcode value that was detected.
-        canvas.drawText(barcode.rawValue, rect.left, rect.bottom, mTextPaint);
+        // The getRawValue() method should be available and work similarly.
+        if (barcode.getRawValue() != null) {
+            canvas.drawText(barcode.getRawValue(), rect.left, rect.bottom, mTextPaint);
+        }
     }
 }

@@ -7,5 +7,6 @@
         android:largeHeap="true"
         android:theme="@style/Theme.AppCompat.NoActionBar">
         <activity android:name="BarcodeCaptureActivity" />
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode" />
     </application>
 </manifest>
