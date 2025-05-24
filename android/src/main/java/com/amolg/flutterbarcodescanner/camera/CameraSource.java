@@ -1032,6 +1032,7 @@ public class CameraSource {
         public void run() {
             // Frame outputFrame; // Old vision Frame
             ByteBuffer data;
+            InputImage imageToProcess;
 
             while (true) {
                 synchronized (mLock) {
@@ -1077,7 +1078,7 @@ public class CameraSource {
                             // Log.e("CameraSource", "Invalid mRotation value: " + mRotation);
                     }
 
-                    InputImage imageToProcess = InputImage.fromByteBuffer(mPendingFrameData, // Renamed variable
+                    imageToProcess = InputImage.fromByteBuffer(mPendingFrameData, // Renamed variable
                             mPreviewSize.getWidth(),
                             mPreviewSize.getHeight(),
                             rotationDegrees, // Use the calculated rotationDegrees
