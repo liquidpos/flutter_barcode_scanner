@@ -60,11 +60,12 @@ import com.google.mlkit.vision.barcode.BarcodeScanning; // Keep
 import com.google.android.gms.tasks.OnSuccessListener; // Keep
 import com.google.android.gms.tasks.OnFailureListener; // Keep
 import androidx.annotation.NonNull; // Add this for @NonNull annotation if not already present
+import androidx.localbroadcastmanager.content.LocalBroadcastManager; // Added for LocalBroadcastManager
 
 
 import java.io.IOException;
 import java.util.List; // For List<Barcode>
-
+import com.amolg.flutter_barcode_scanner.R;
 /**
  * Activity for the multi-tracker app.  This app detects barcodes and displays the value with the
  * rear facing camera. During detection overlay graphics are drawn to indicate the position,
@@ -219,20 +220,20 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
             // For FORMAT_ALL_FORMATS, it's better to list them if specific ones are known,
             // as FORMAT_ALL_FORMATS might include experimental or less common ones.
             optionsBuilder.setBarcodeFormats(
-                    Barcode.FORMAT_CODE_128,
-                    Barcode.FORMAT_CODE_39,
-                    Barcode.FORMAT_CODE_93,
-                    Barcode.FORMAT_CODABAR,
-                    Barcode.FORMAT_EAN_13,
-                    Barcode.FORMAT_EAN_8,
-                    Barcode.FORMAT_ITF,
-                    Barcode.FORMAT_UPC_A,
-                    Barcode.FORMAT_UPC_E,
-                    Barcode.FORMAT_DATA_MATRIX, // Added common 2D
-                    Barcode.FORMAT_PDF_417 // Added common 2D
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODE_128,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODE_39,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODE_93,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODABAR,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_EAN_13,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_EAN_8,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_ITF,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_A,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_E,
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX, 
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_PDF417
             );
         } else { // DEFAULT or any other case
-            optionsBuilder.setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS);
+            optionsBuilder.setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_ALL_FORMATS);
         }
 
         BarcodeScanner scanner = BarcodeScanning.getClient(optionsBuilder.build());
@@ -403,12 +404,10 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
             Intent data = new Intent();
             // Ensure BarcodeObject is compatible with com.google.mlkit.vision.barcode.common.Barcode
             // or handle the conversion/data extraction appropriately.
-            // For now, we assume com.google.mlkit.vision.barcode.common.Barcode is Parcelable
-            // or we extract rawValue.
-            data.putExtra(BarcodeObject, bestBarcode); // This might cause issues if BarcodeObject expects the old Barcode type
-            // It's safer to pass rawValue or necessary fields.
-            // data.putExtra("BarcodeRawValue", bestBarcode.getRawValue());
-            // data.putExtra("BarcodeFormat", bestBarcode.getFormat());
+            // data.putExtra(BarcodeObject, bestBarcode); // REMOVE THIS
+            data.putExtra("BarcodeRawValue", bestBarcode.getRawValue());
+            data.putExtra("BarcodeFormat", bestBarcode.getFormat());
+            data.putExtra("BarcodeValueType", bestBarcode.getValueType());
             setResult(CommonStatusCodes.SUCCESS, data);
             finish();
             return true;
@@ -436,10 +435,11 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
                 Log.e("BarcodeCaptureActivity", "FlashOnFailure: " + e.getLocalizedMessage());
             }
         } else if (i == R.id.btnBarcodeCaptureCancel) {
-            Barcode barcode = new Barcode();
-            barcode.rawValue = "-1";
-            barcode.displayValue = "-1";
-            FlutterBarcodeScannerPlugin.onBarcodeScanReceiver(barcode);
+            // Barcode barcode = new Barcode(); // Remove
+            // barcode.rawValue = "-1";        // Remove
+            // barcode.displayValue = "-1";    // Remove
+            // FlutterBarcodeScannerPlugin.onBarcodeScanReceiver(barcode); // Remove this incorrect call
+            setResult(Activity.RESULT_CANCELED); // Standard way to indicate cancellation
             finish();
         } else if (i == R.id.imgViewSwitchCamera) {
             int currentFacing = mCameraSource.getCameraFacing();
@@ -544,7 +544,6 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
         }
     }
 
-    @Override
     // This method is from BarcodeGraphicTracker.BarcodeUpdateListener and will be removed.
     // public void onBarcodeDetected(com.google.android.gms.vision.barcode.Barcode barcode) { ... }
 
@@ -607,10 +606,15 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
                          // This means the first barcode detected will be returned.
                          // This is a compromise until the plugin side is also refactored.
 
-                        // If continuous scan is enabled, the plugin should handle it.
-                        // We pass the first detected barcode to the plugin.
-                        // FlutterBarcodeScannerPlugin.onBarcodeScanReceiver has been updated to accept ML Kit Barcode.
-                        FlutterBarcodeScannerPlugin.onBarcodeScanReceiver(barcodes.get(0));
+                        // If continuous scan is enabled, send barcode via LocalBroadcastManager.
+                        if (!barcodes.isEmpty()) {
+                            firstBarcode = barcodes.get(0);
+                            if (firstBarcode.getRawValue() != null) {
+                                Intent intent = new Intent(FlutterBarcodeScannerPlugin.ACTION_BARCODE_SCANNED);
+                                intent.putExtra(FlutterBarcodeScannerPlugin.EXTRA_BARCODE_RAW_VALUE, firstBarcode.getRawValue());
+                                LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+                            }
+                        }
                      }
                      // The 'else' case for non-continuous scan is handled by the outer 'else' block.
                      // No 'else' needed here as this is inside the `if (!barcodes.isEmpty())`
@@ -621,7 +625,7 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
                     Intent data = new Intent();
                     // Pass the ML Kit Barcode object directly.
                     // The plugin's onActivityResult has been updated to expect this.
-                    data.putExtra(BarcodeObject, barcodes.get(0)); 
+                    // data.putExtra(BarcodeObject, barcodes.get(0));  // REMOVE THIS
                     // Also include raw value and format as fallbacks or for convenience for the plugin.
                     data.putExtra("BarcodeRawValue", barcodes.get(0).getRawValue());
                     data.putExtra("BarcodeFormat", barcodes.get(0).getFormat());

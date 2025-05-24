@@ -1032,6 +1032,7 @@ public class CameraSource {
         public void run() {
             // Frame outputFrame; // Old vision Frame
             ByteBuffer data;
+            InputImage imageToProcess;
 
             while (true) {
                 synchronized (mLock) {
@@ -1058,30 +1059,29 @@ public class CameraSource {
                     
                     // Get the rotation from CameraSource's mRotation field
                     // The rotation needs to be converted to one of InputImage.IMAGE_ROTATION_DEGREES constants
-                    int imageRotation;
+                    int rotationDegrees; // Renamed for clarity
                     switch (mRotation) { // mRotation is field in outer class CameraSource (0, 1, 2, 3)
                         case 0:
-                            imageRotation = InputImage.ROTATION_0;
+                            rotationDegrees = 0;
                             break;
                         case 1:
-                            imageRotation = InputImage.ROTATION_90;
+                            rotationDegrees = 90;
                             break;
                         case 2:
-                            imageRotation = InputImage.ROTATION_180;
+                            rotationDegrees = 180;
                             break;
                         case 3:
-                            imageRotation = InputImage.ROTATION_270;
+                            rotationDegrees = 270;
                             break;
                         default:
-                            imageRotation = InputImage.ROTATION_0;
+                            rotationDegrees = 0;
                             // Log.e("CameraSource", "Invalid mRotation value: " + mRotation);
                     }
 
-
-                    InputImage image = InputImage.fromByteBuffer(mPendingFrameData,
+                    imageToProcess = InputImage.fromByteBuffer(mPendingFrameData, // Renamed variable
                             mPreviewSize.getWidth(),
                             mPreviewSize.getHeight(),
-                            imageRotation, // Use the calculated imageRotation
+                            rotationDegrees, // Use the calculated rotationDegrees
                             InputImage.IMAGE_FORMAT_NV21 // Assuming NV21, common for camera preview
                     );
 
@@ -1092,7 +1092,7 @@ public class CameraSource {
                 try {
                     // mDetector.receiveFrame(outputFrame); // Old vision detector call
                     if (mScanner != null && mOnBarcodesScannedListener != null) {
-                        mScanner.process(image)
+                        mScanner.process(imageToProcess) // Use the renamed variable
                                 .addOnSuccessListener(new OnSuccessListener<List<Barcode>>() {
                                     @Override
                                     public void onSuccess(List<Barcode> barcodes) {
