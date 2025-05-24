@@ -1,7 +1,7 @@
 package com.amolg.flutterbarcodescannerexample;
 
 import android.os.Bundle;
-import io.flutter.embedding.android.FlutterActivity;
+import io.flutter.app.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugins.GeneratedPluginRegistrant;
 

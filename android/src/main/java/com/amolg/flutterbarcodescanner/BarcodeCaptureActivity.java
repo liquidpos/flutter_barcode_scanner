@@ -65,7 +65,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager; // Added fo
 
 import java.io.IOException;
 import java.util.List; // For List<Barcode>
-import com.amolg.flutter_barcode_scanner.R;
+
 /**
  * Activity for the multi-tracker app.  This app detects barcodes and displays the value with the
  * rear facing camera. During detection overlay graphics are drawn to indicate the position,
@@ -230,7 +230,7 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
                     com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_A,
                     com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_E,
                     com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX, 
-                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_PDF417
+                    com.google.mlkit.vision.barcode.common.Barcode.FORMAT_PDF_417
             );
         } else { // DEFAULT or any other case
             optionsBuilder.setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_ALL_FORMATS);
@@ -544,6 +544,7 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
         }
     }
 
+    @Override
     // This method is from BarcodeGraphicTracker.BarcodeUpdateListener and will be removed.
     // public void onBarcodeDetected(com.google.android.gms.vision.barcode.Barcode barcode) { ... }
 
@@ -608,7 +609,7 @@ public final class BarcodeCaptureActivity extends AppCompatActivity implements C
 
                         // If continuous scan is enabled, send barcode via LocalBroadcastManager.
                         if (!barcodes.isEmpty()) {
-                            firstBarcode = barcodes.get(0);
+                            com.google.mlkit.vision.barcode.common.Barcode firstBarcode = barcodes.get(0);
                             if (firstBarcode.getRawValue() != null) {
                                 Intent intent = new Intent(FlutterBarcodeScannerPlugin.ACTION_BARCODE_SCANNED);
                                 intent.putExtra(FlutterBarcodeScannerPlugin.EXTRA_BARCODE_RAW_VALUE, firstBarcode.getRawValue());
