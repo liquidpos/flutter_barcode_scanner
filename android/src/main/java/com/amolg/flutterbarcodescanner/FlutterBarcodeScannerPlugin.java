@@ -95,6 +95,11 @@ public class FlutterBarcodeScannerPlugin implements MethodCallHandler, ActivityR
         try {
             this.pendingResult = result; // Use instance field
 
+            if (this.activity == null) {
+                result.error("ACTIVITY_UNAVAILABLE", "Activity is not available to start scanning.", null);
+                return;
+            }
+
             if (call.method.equals("scanBarcode")) {
                 if (!(call.arguments instanceof Map)) {
                     throw new IllegalArgumentException("Plugin not passing a map as parameter: " + call.arguments);
@@ -125,6 +130,16 @@ public class FlutterBarcodeScannerPlugin implements MethodCallHandler, ActivityR
     }
 
     private void startBarcodeScannerActivityView(String buttonText, boolean isContinuousScan) {
+        if (activity == null) {
+            Log.e(TAG, "Attempted to start BarcodeCaptureActivity with a null activity reference.");
+            // If pendingResult is available and this method is somehow called directly,
+            // inform the caller. However, the check in onMethodCall should prevent this.
+            if (pendingResult != null) {
+                pendingResult.error("ACTIVITY_UNAVAILABLE", "Activity is not available to start scanning.", null);
+                pendingResult = null; // Reset pendingResult after use
+            }
+            return;
+        }
         try {
             Intent intent = new Intent(activity, BarcodeCaptureActivity.class).putExtra("cancelButtonText", buttonText);
             if (isContinuousScan) {
@@ -134,6 +149,11 @@ public class FlutterBarcodeScannerPlugin implements MethodCallHandler, ActivityR
             }
         } catch (Exception e) {
             Log.e(TAG, "startView: " + e.getLocalizedMessage());
+            // If an exception occurs, and pendingResult is available, report error.
+            if (pendingResult != null) {
+                pendingResult.error("SCAN_FAILED", "Failed to start barcode scanner activity.", e.getMessage());
+                pendingResult = null; // Reset pendingResult after use
+            }
         }
     }
 
